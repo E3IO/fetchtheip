@@ -1,0 +1,15 @@
+[Unit]
+Description=Telegram Bot for fetching real IP address
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/path/fetch-real-ip
+ExecStart=/path/fetch-real-ip/target/release/fetch-real-ip
+Restart=on-failure
+RestartSec=10
+Environment=RUST_LOG=info
+
+[Install]
+WantedBy=multi-user.target
