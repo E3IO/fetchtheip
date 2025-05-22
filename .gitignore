@@ -1,0 +1,5 @@
+/target
+.env
+*.pem
+*.log
+.DS_Store
