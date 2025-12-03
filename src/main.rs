@@ -1,4 +1,5 @@
 use std::env;
+use std::time::Duration;
 use anyhow::Result;
 use dotenv::dotenv;
 use log::{info, warn};
@@ -6,6 +7,9 @@ use reqwest::Client;
 use reqwest::Proxy;
 use serde::Deserialize;
 use teloxide::prelude::*;
+use teloxide::dptree;
+use teloxide::dispatching::Dispatcher;
+use teloxide::types::Update;
 use teloxide::utils::command::BotCommands;
 
 #[derive(BotCommands, Clone)]
@@ -128,20 +132,58 @@ async fn main() -> Result<()> {
     let socks_proxy = env::var("SOCKS_PROXY")
         .expect("SOCKS_PROXY not set in .env file");
     
-    // 创建带有SOCKS代理的客户端
+    // 可配置的请求超时（默认：总超时 20s，连接超时 10s）
+    let req_timeout_secs: u64 = env::var("REQ_TIMEOUT_SECS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(20);
+    let req_connect_timeout_secs: u64 = env::var("REQ_CONNECT_TIMEOUT_SECS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(10);
+
+    // 创建带有SOCKS代理与超时的客户端
     let client = Client::builder()
         .proxy(Proxy::all(socks_proxy)?)
+        .timeout(Duration::from_secs(req_timeout_secs))
+        .connect_timeout(Duration::from_secs(req_connect_timeout_secs))
         .build()?;
     
     // 创建带有自定义客户端的机器人
     let bot = Bot::with_client(bot_token, client);
-    
+
     // 注册命令
     bot.set_my_commands(Command::bot_commands()).await?;
-    
-    // 启动机器人
+
+    // Dispatcher + 可配置快速停
+    let handler = Update::filter_message()
+        .branch(dptree::entry().filter_command::<Command>().endpoint(answer));
+
+    let mut dispatcher = Dispatcher::builder(bot, handler).build();
+
+    // 读取关停超时（默认 5s）
+    let shutdown_timeout_secs: u64 = env::var("SHUTDOWN_TIMEOUT_SECS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(5);
+
+    // Ctrl-C 触发优雅关闭，并与 dispatch 并发竞争可配置的关闭超时
+    let token = dispatcher.shutdown_token();
     info!("Bot started successfully");
-    Command::repl(bot, answer).await;
-    
+    tokio::select! {
+        _ = async { dispatcher.dispatch().await } => { }
+        _ = async {
+            let _ = tokio::signal::ctrl_c().await;
+            warn!("SIGINT received, starting shutdown...");
+            token.shutdown();
+            tokio::time::sleep(Duration::from_secs(shutdown_timeout_secs)).await;
+        } => {
+            warn!(
+                "Shutdown timeout ({}s) reached; exiting without waiting further",
+                shutdown_timeout_secs
+            );
+        }
+    }
+
     Ok(())
 }
