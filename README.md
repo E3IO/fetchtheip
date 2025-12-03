@@ -22,10 +22,10 @@
 2. 编辑 `.env` 文件，填入以下信息：
    ```
    TELOXIDE_TOKEN=your_telegram_bot_token_here
-   SOCKS_PROXY=socks5://127.0.0.1:1080
+   SOCKS_PROXY=socks5h://127.0.0.1:1080
    ```
    - `TELOXIDE_TOKEN`: 你的 Telegram 机器人 Token
-   - `SOCKS_PROXY`: SOCKS 代理地址（格式为 `socks5://host:port`）
+   - `SOCKS_PROXY`: SOCKS 代理地址（格式为 `socks5h://host:port`）
 
 ### 编译与运行
 
